@@ -17,8 +17,8 @@ J= diffs'*diffs;		% sum of squares
 %   for the output.
 
 %compute the gradients
-deltaY = output - C(words(3));
-deltaC3 = -1*ones(size(C,2));
+deltaY = output - y; % C(words(3));
+%deltaC3 = -1*ones(size(C,2)); this for previous scheme
 
 %        theta2Grad[j,i] = partialDiff(J,theta2[j,i])
 %			 = deltaY[j] * hidden[i]
@@ -45,7 +45,7 @@ nC(words(1),1:100) = C(1) - stepsize*deltaX(2:101);
 nC(words(2),1:100) = C(2) - stepsize*deltaX(102:201);
 nC(words(4),1:100) = C(4) - stepsize*deltaX(202:301);
 nC(words(5),1:100) = C(5) - stepsize*deltaX(302:401);
-nC(words(3),1:100) = C(3) - stepsize*deltaY;
+%nC(words(3),1:100) = C(3) - stepsize*deltaY;
 
 %return the corrected values
 %return

@@ -2,13 +2,15 @@ hidden_layer_size=60
 vocabulary_size=2645
 feature_length=100
 input_order = 4;
+output_size = 100;
+"using one-of-",output_size
 
 epsilon_init = 0.12; % used to initialize weights
 
 %initialize the feature vector to random numbers.
-C = rand(vocabulary_size,feature_length);
+C = rand(vocabulary_size,feature_length)*2*epsilon_init - epsilon_init;
 input = zeros(input_order*feature_length);
-output = zeros(feature_length);
+output = zeros(feature_length, 1);
 hidden = rand(hidden_layer_size);
 
 % weight coefficients
@@ -35,8 +37,10 @@ for i = 1:(training_rows)
 endfor
 %we may repeat this many times; but for starters, a single pass
 w = zeros(5,1);
+cases = 0;
 runningAverage = 0;
 stepsize = 0.001;
+for reps = 1:20
 for i = 1:(training_rows-5)
 % input order is hardcoded in this loop (as 4 words of context)
 w(1) = emma(i);
@@ -45,21 +49,38 @@ w(3) = emma(i+2);
 w(4) = emma(i+3);
 w(5) = emma(i+4);
 
+if (w(3) >= output_size )  % changing action ...
+  continue; 
+endif
+cases = cases + 1;
+
 C1 =  C(w(1),1:feature_length);
 C2 =  C(w(2),1:feature_length);
-C3 =  C(w(3),1:feature_length);
 C4 =  C(w(4),1:feature_length);
 C5 =  C(w(5),1:feature_length);
 input = [ C1 C2 C4 C5 ]';
-y =  C3';
+y =  zeros(output_size,1);
+y(w(3)) = 1;
 
 [J, C, theta1, theta2] = trainstep(input,theta1, theta2, C, w, y, stepsize);
 runningAverage = runningAverage * 0.99 + J;
-if ( mod(i, 1000) == 0 )
+if ( mod(i, 10000) == 0 )
+   disp(reps);
+   disp(i);
    disp(runningAverage/100);
+%   disp(output);
+   
 endif
  
 endfor
+disp(cases);
+disp(runningAverage/100);
+disp(C(1:2,1:end));
+disp(C(99:100,1:end));
+endfor
 
-disp(C);
+
+disp(C(1:10,1:end));
+save -ascii C.mat C
+
 
