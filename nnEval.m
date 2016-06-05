@@ -1,17 +1,19 @@
-function [output, ah, hid1, inp1]  = nnEval(input, theta1, theta2);
-% input is  px1 column vector
-inp1 = [1; input] ; % add bias
-% theta1 is a q x p+1 matrix
+function [s,y,p, o, a ]  = nnEval(x, d,H, b,U);
+% x is  px1 column vector
+% d is q x 1  bias vector
+% H is a q x p matrix
 % there's a hidden layer, q x 1
-%hidden = sigmoid(theta1 * inp1);
+% for which we compute o and p
 
-ah = theta1 * inp1;
-hidden = tanh(ah);
-hid1 = [1; hidden];
+o = H * x + d;
+a = tanh(o);
 
-%theta2 is a r x q+1  matrix
+%U is a r x q  matrix
 %output is a r x 1 column vector
-output = (theta2 * hid1);
+y = b + (U * a);
+pt = exp(y);
+s = sumsq(pt);  % here we approximate s by summing only over first 1000 words
+p = (1/s) * pt;
 
 %return
 endfunction

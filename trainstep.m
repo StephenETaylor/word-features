@@ -1,51 +1,79 @@
-function [J,nC,ntheta1,ntheta2] = trainstep ( input, theta1, theta2, C, words, y, stepsize)
+% this is a stochastic training function; returns new values of C, d,H, b,U
+% which give a higher objective function value than the current ones
 
-% a stochastic training function; returns new values of C, theta1, theta2
-% which are give a lower error function value than the current ones
+function [L,nC, nd,nH, nb,nU] = trainstep ( x, d,H, b,U, C, words, expected, epsilon, R)
+%x is input units,  built up in caller from C and words
+%d is bias for hidden layer
+%H is weight coefficients to build hidden layer o
+%a is hidden units, a = tanh(o)
+%b is bias for y layer
+%U is weight coefficients to build y layer
+%y = b+U*a, and said to be log probabilities units.
+%p is normalized e**y/s, 
 
-%evaluate the neural network. hidden and x both have the 1 entries for bias
-[output, ah, hidden, x] = nnEval(input, theta1, theta2);
 
-%compute the error function
-diffs = output - y;
-J= diffs'*diffs;		% sum of squares
 
-% I have omitted regularization, as well as another problem:
-%   Any version of C in which all rows are equal has a zero error code!
-%   So the error function should penalize low variance in C.
-%   The Bengio et al. article avoids this by using one-of-n encoding
-%   for the output.
+%evaluate the neural network. 
+[s,y,p, o,a] = nnEval(x, d,H, b,U);
+
+%compute the Objective function.  Since we're going to be maximizing
+% this objective function, I subtract R, so that smaller weights give
+% a larger objective function.
+
+% it appears we don't use L except to report it, but
+% L = (1/T)*Sum log f(w_t, w_{t-1},...,w_{t-n}; Theta) + R(Theta)
+% I think T is the (constant) size of the vocabulary
+% I omit that calculation, and I really don't understand the sum,
+% although I think the intent is to compute the per-word entropy
+L= sum(y) - R*sum(sum(abs(U))) -R*sum(sum(abs(H))) - R*sum(sum(abs(C)));
 
 %compute the gradients
-deltaY = output - y; % C(words(3));
-%deltaC3 = -1*ones(size(C,2)); this for previous scheme
+% paper shows loop over each of the outputs p[j] or the corresponding y[j]
+% and my comments reflect that, but the code attempts to combine the loop
+% into matrix operations.
 
-%        theta2Grad[j,i] = partialDiff(J,theta2[j,i])
-%			 = deltaY[j] * hidden[i]
-theta2Grad = deltaY * hidden';
-%
-%        deltaH[j] = diff(J, ah[j]) 
-%		   = (diff(tanh,x)(ah[j])) * sum(all k, theta2[k,j]*deltaY)
-deltaH = (ones(size(hidden)) - (hidden .* hidden)) .* ( theta2'*deltaY ) ;
+% partial derivative of L wrt y[j] = (j==words[3]?1:0) - p[j]
+pdiffLwrtY = expected - p; % 
 
-%        theta1Grad[j,i] = partialDiff(J,theta1[j,i])
-%			 = deltaH[j] * input[i]
-theta1Grad = deltaH(2:end,1) * x';
+% new b[j]  = b[j] + epsilon * pdiffLwrtY[j]
+nb = b + epsilon*pdiffLwrtY;   % adjust bias for next 
 
-%	since we don't do a forward computation of hidden[1] (==1, the 'bias')
-%	there aren't corresponding theta1 values to compute it.
-%	(not an issue for deltaY: since y is output there is no y bias unit)
-deltaX = theta1' * deltaH(2:end,1);
+%I chose not to implement direct connections: no W[j] weights to change
+% and pdiffLwrtX not immediately changed by pdiffLwrtY
 
-%correct the various coefficients
-ntheta2 = theta2 - stepsize* theta2Grad;
-ntheta1 = theta1 - stepsize* theta1Grad;
+% pdiffLwrtA += pdiffLwrtY * U[j]  % U[j] is a vector, better be hidden_layer_size
+pdiffLwrtA = U' * pdiffLwrtY;  %sum over all y with matrix multiply
+
+% U[j] = U[j] + epsilon * pdiffLwrtY[j] * a
+
+nU = U + epsilon * (pdiffLwrtY * a');
+
+%  the (b) comment (b)calls for summing and sharing pdiffLwrtX and pdiffLwrtA
+%  across all processors, but although I'm following along, I'm not writing
+%  networked code.
+
+%  (c) back-prop step.  For all k:
+%  pdiffLwrtO[k] = (1-a[k]**2) * pdiffLwrtA[k]
+
+pdiffLwrtO = (ones(size(a)) - a .* a) .* pdiffLwrtA;
+
+% paper has:  
+% pdiffLwrtX = pdiffLwrtX + H' * pdifLwrtO
+% but they initialized to zero, then share and sum pdiffLwrtX among processors
+% as well as possibly having direct connects from x to y.
+% So I just initialize pdiffLwrtX here
+
+pdiffLwrtX =  H' * pdiffLwrtO;
+
+nd = d + epsilon * pdiffLwrtO;
+
+nH = H + epsilon * pdiffLwrtO * x';
+
 nC = C;
-nC(words(1),1:100) = C(1) - stepsize*deltaX(2:101);
-nC(words(2),1:100) = C(2) - stepsize*deltaX(102:201);
-nC(words(4),1:100) = C(4) - stepsize*deltaX(202:301);
-nC(words(5),1:100) = C(5) - stepsize*deltaX(302:401);
-%nC(words(3),1:100) = C(3) - stepsize*deltaY;
+nC(words(1),1:100) = C(1) + epsilon*pdiffLwrtX(1:100);
+nC(words(2),1:100) = C(2) + epsilon*pdiffLwrtX(101:200);
+nC(words(4),1:100) = C(4) + epsilon*pdiffLwrtX(201:300);
+nC(words(5),1:100) = C(5) + epsilon*pdiffLwrtX(301:400);
 
 %return the corrected values
 %return
