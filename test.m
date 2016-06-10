@@ -6,9 +6,42 @@ hidden_layer_size=60
 vocabulary_size=2645
 feature_length=100
 input_order = 4;
-R = 0; %regularization factor
+R = 1E-4 ;%regularization factor
+epochs = 20 ;% number of passes to make over the input
+stepsize = 0.001;
 output_size = 100;
 "using one-of-",output_size
+
+% notice that argList is going to be a "cell-array" -- its
+% a ragged array of chars.  We can reference individual strings by their row, as
+% argList{i}
+argList = argv();
+skip = 0;
+for i=1:nargin
+ if (skip == 0)
+  if (isequal(argList{i} , "R"))
+       R = str2double(argList(i+1));
+       skip = 1;
+  elseif (isequal(argList{i} , "epochs"))
+       epochs = str2double(argList(i+1));
+       skip = 1;
+  elseif (isequal(argList{i} , "stepsize"))
+       stepsize = str2double(argList(i+1));
+       skip = 1;
+  else
+       printf("unknown parameter: %s\n R and epochs and stepsize (each followed by a number) are allowed\n",argList{i});
+  endif;
+ else skip = 0;
+ endif
+endfor
+
+%display the values which may have been modified by the command arguments
+R
+epochs
+stepsize
+
+start_time = ctime(time())
+
 
 epsilon_init = 0.12; % used to initialize weights
 
@@ -18,6 +51,8 @@ x = zeros(input_order*feature_length,1);
 
 % b and d are biases, and I think breaking them out is unbeautiful.  
 % previously I included them in theta1 and theta2 which are now H and U
+% I think that the reason for breaking them out is that they
+% do not participate in regularization.
 d = rand(hidden_layer_size,1)*2*epsilon_init - epsilon_init; %I think it should be a vector...
 b = rand(output_size,1)*2*epsilon_init - epsilon_init;
 
@@ -53,18 +88,18 @@ endfor
 w = zeros(5,1);
 cases = 0;
 runningAverage = 0;
-stepsize = 0.001;
-for reps = 1:20
-for t = 3:(training_rows-3)
-  % Although I make 20 passes over the data, I always do it in the same order
-  % it would make more sense to incorporate some randomness to chose which
+for reps = 1:epochs
+rchoice = randperm(training_rows-4) + 3;
+for q = 1:(training_rows-4) % 3:(training_rows-3)
+  % Although I make 20 passes over the data, I always do it in a different order
+t = rchoice(q);
 % input order is hardcoded in this loop (as 4 words of context)
     
 for i = -2:2
 w(i+3) = emma(t+i);
 endfor
 
-if (w(3) >= output_size )  % changing action ...
+if (w(3) > output_size )  % changing action ...
   continue; 
 endif
 cases = cases + 1;
@@ -79,23 +114,32 @@ expected(w(3)) = 1;
 
 [J, C, d,H, b,U] = trainstep(x,d,H, b,U, C, w, expected, stepsize, R);
 runningAverage = runningAverage * 0.99 + J;
-if ( mod(t, 10000) == 0 )
+if ( mod(cases, 10000) == 0 )
    disp(reps);
-   disp(t);
+   disp(cases);
    disp(runningAverage/100);
 %   disp(output);
    
 endif
  
 endfor
-disp(cases);
+cases % display number of training cases
+
 disp(runningAverage/100);
-disp(C(1:2,1:end));
-disp(C(99:100,1:end));
+C_col1_stats = statistics(C(1:end,1)')
+C_row1_stats = statistics(C(1:1,1:end))
 endfor
 
 
-disp(C(1:10,1:end));
-save -ascii C.mat C
+%disp(C(1:10,1:end));
 
+
+%should save the entire learned weights, d, H, b, U, C, as well as 
+% the dimensions-determining parameters: 
+
+parameters = [ hidden_layer_size, vocabulary_size, feature_length, input_order , output_size, R , epochs , stepsize ]
+
+save -text NN.mat parameters d H b U C
+
+printf(" started at %s time now %s\n", start_time, ctime(time()));
 
