@@ -10,7 +10,7 @@ R = 1E-4 ;%regularization factor
 epochs = 20 ;% number of passes to make over the input
 stepsize = 0.001;
 output_size = 100;
-"using one-of-",output_size
+start_file = "";
 
 % notice that argList is going to be a "cell-array" -- its
 % a ragged array of chars.  We can reference individual strings by their row, as
@@ -28,23 +28,36 @@ for i=1:nargin
   elseif (isequal(argList{i} , "stepsize"))
        stepsize = str2double(argList(i+1));
        skip = 1;
+  elseif (isequal(argList{i} , "output_size"))
+       output_size = str2double(argList(i+1));
+       skip = 1;
+  elseif (isequal(argList{i} , "start_file"))
+       start_file = str2double(argList(i+1));
+       skip = 1;
   else
-       printf("unknown parameter: %s\n R and epochs and stepsize (each followed by a number) are allowed\n",argList{i});
+       printf("unknown parameter: %s\n R and epochs and stepsize and output_size (each followed by a number) are allowed\n",argList{i});
   endif;
  else skip = 0;
  endif
 endfor
 
 %display the values which may have been modified by the command arguments
-R
-epochs
-stepsize
 
 start_time = ctime(time())
 
 
 epsilon_init = 0.12; % used to initialize weights
 
+if start_file != ""
+load -text NN.mat parameters d H b U C
+ hidden_layer_size=parameters(1)
+vocabulary_size=parameters(2)
+feature_length=parameters(3)
+input_order =parameters(4)
+output_size=parameters(5)
+R =parameters(6)
+
+else % startfile name is empty so
 %initialize the feature vector to random numbers.
 C = rand(vocabulary_size,feature_length)*2*epsilon_init - epsilon_init;
 x = zeros(input_order*feature_length,1);
@@ -57,7 +70,7 @@ d = rand(hidden_layer_size,1)*2*epsilon_init - epsilon_init; %I think it should 
 b = rand(output_size,1)*2*epsilon_init - epsilon_init;
 
 % these aren't really declarations, they're comments about the sizes I expect
-output = zeros(feature_length, 1);
+output = zeros(output_size, 1);
 o = rand(hidden_layer_size);
 a = rand(hidden_layer_size);
 
@@ -67,6 +80,12 @@ H = rand(st1)*2*epsilon_init - epsilon_init; %+(ones(st1)*(-0.5)); % from x to o
 
 st2 = [size(output,1) size(a,1)]; % second element was 1+size for bias, now in b
 U = rand(st2)*2*epsilon_init - epsilon_init; %+(ones(st2)*(-0.5)); % from a to output
+endif  % of start_file if
+% print stuff
+R
+epochs
+stepsize
+output_size
 
 %run through the training file.  open to read text using default architecture
 %[FID, MSG] = fopen("train.txt", "rt")
@@ -89,6 +108,10 @@ w = zeros(5,1);
 cases = 0;
 runningAverage = 0;
 for reps = 1:epochs
+epochSum = 0;
+epoch2Sum = 0;
+epochCount = 0;
+
 rchoice = randperm(training_rows-4) + 3;
 for q = 1:(training_rows-4) % 3:(training_rows-3)
   % Although I make 20 passes over the data, I always do it in a different order
@@ -113,19 +136,28 @@ expected =  zeros(output_size,1);
 expected(w(3)) = 1;
 
 [J, C, d,H, b,U] = trainstep(x,d,H, b,U, C, w, expected, stepsize, R);
+
+epochSum = epochSum + J;
+epoch2Sum = epoch2Sum + J*J;
+epochCount = epochCount + 1;
 runningAverage = runningAverage * 0.99 + J;
 if ( mod(cases, 10000) == 0 )
    disp(reps);
    disp(cases);
    disp(runningAverage/100);
 %   disp(output);
+
+
    
 endif
  
 endfor
 cases % display number of training cases
 
-disp(runningAverage/100);
+average = epochSum / epochCount;
+variance = (epoch2Sum )/epochCount- average*average;
+printf("epoch mean: %f variance %f\n",average, variance);
+
 C_col1_stats = statistics(C(1:end,1)')
 C_row1_stats = statistics(C(1:1,1:end))
 endfor
