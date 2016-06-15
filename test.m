@@ -2,6 +2,7 @@
 % A Neural probabilistic language model.
 % Journal of machine Learning research 3, (2003) pp1137-1155
 
+start_time = ctime(time())
 hidden_layer_size=60
 vocabulary_size=2645
 feature_length=100
@@ -41,9 +42,7 @@ for i=1:nargin
  endif
 endfor
 
-%display the values which may have been modified by the command arguments
 
-start_time = ctime(time())
 
 
 epsilon_init = 0.12; % used to initialize weights
@@ -81,6 +80,8 @@ H = rand(st1)*2*epsilon_init - epsilon_init; %+(ones(st1)*(-0.5)); % from x to o
 st2 = [size(output,1) size(a,1)]; % second element was 1+size for bias, now in b
 U = rand(st2)*2*epsilon_init - epsilon_init; %+(ones(st2)*(-0.5)); % from a to output
 endif  % of start_file if
+
+%display the values which may have been modified by the command arguments
 % print stuff
 R
 epochs

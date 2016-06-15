@@ -1,7 +1,76 @@
+% debugging file
+
+%read in saved parameters
+load -text NN.mat parameters d H b U C
+ hidden_layer_size=parameters(1)
+vocabulary_size=parameters(2)
+feature_length=parameters(3)
+input_order =parameters(4)
+output_size=parameters(5)
+R =parameters(6)
+epochs =parameters(7)
+stepsize =parameters(8)
+
+start_time = ctime(time())
+
+
+
+% these aren't really declarations, they're comments about the sizes I expect
+%output = zeros(feature_length, 1);
+%o = rand(hidden_layer_size);
+%a = rand(hidden_layer_size);
+
+
+
+%run through the training file.  open to read text using default architecture
+%[FID, MSG] = fopen("train.txt", "rt")
+emma = textread("train.txt", "%f");
+
+rows = size(emma,1);
+%display (rows);
+
+%we'll train with only 80 percent of the data
+% I haven't written code for validation and test, but I'm reserving 10% for each 
+training_rows = floor(0.8 * rows);
+
+for i = 1:(rows)
+   if (emma(i) == 0 )
+      emma(i) = vocabulary_size; 
+   endif
+endfor
+
+
+%we may repeat this many times; but for starters, a single pass
+w = zeros(5,1);
+cases = 0;
+runningAverage = 0;
+for t =  3:(training_rows-3)
+% input order is hardcoded in this loop (as 4 words of context)
+    
+for i = -2:2
+w(i+3) = emma(t+i);
+endfor
+
+if (w(3) > output_size )  % changing action ...
+  continue; 
+endif
+cases = cases + 1;
+
+C1 =  C(w(1),1:feature_length);
+C2 =  C(w(2),1:feature_length);
+C4 =  C(w(4),1:feature_length);
+C5 =  C(w(5),1:feature_length);
+x = [ C1 C2 C4 C5 ]';
+expected =  zeros(output_size,1);
+expected(w(3)) = 1;
+
+%[J, C, d,H, b,U] = trainstep(x,d,H, b,U, C, w, expected, stepsize, R);
 % this is a stochastic training function; returns new values of C, d,H, b,U
 % which give a higher objective function value than the current ones
 
-function [L,nC, nd,nH, nb,nU] = trainstep ( x, d,H, b,U, C, words, expected, epsilon, R)
+words = w;
+epsilon = R;
+%function [L,nC, nd,nH, nb,nU] = trainstep ( x, d,H, b,U, C, words, expected, epsilon, R)
 %x is input units,  built up in caller from C and words
 %d is bias for hidden layer
 %H is weight coefficients to build hidden layer o
@@ -44,13 +113,15 @@ function [L,nC, nd,nH, nb,nU] = trainstep ( x, d,H, b,U, C, words, expected, eps
 
 L= -(log(p(words(3)))) + 0.5*R*(sum(sumsq(U)) +sum(sumsq(H)) + sum(sumsq(C)));
 
+
 %compute the gradients
 % paper shows loop over each of the outputs p[j] or the corresponding y[j]
 % and my comments reflect that, but the code attempts to combine the loop
 % into matrix operations.
 
 % partial derivative of L wrt y[j] = (j==words[3]?1:0) - p[j]
-pdiffLwrtY = expected - p; %sic. But ` 
+pdiffLwrtY = expected - p; %sic. Bishop, Ng reverse sign, use ...-epsilon...
+
 
 % new b[j]  = b[j] + epsilon * pdiffLwrtY[j]
 nb = b + epsilon*pdiffLwrtY;   % adjust bias for next 
@@ -59,11 +130,24 @@ nb = b + epsilon*pdiffLwrtY;   % adjust bias for next
 % and pdiffLwrtX not immediately changed by pdiffLwrtY
 
 % pdiffLwrtA += pdiffLwrtY * U[j]  % U[j] is a vector, better be hidden_layer_size
+%  ptLa attempts to duplicate Bengio calculation
+%  finally got it to match: note transpose in my loop, not in paper.
+ptLa = zeros(hidden_layer_size,1);
+for j = 1:output_size
+  ptLa = ptLa + (pdiffLwrtY(j)) * (U(j,1:hidden_layer_size))';
+endfor
+
+% here I replace loop
 pdiffLwrtA = U' * pdiffLwrtY;  %sum over all y with matrix multiply
 
 % U[j] = U[j] + epsilon * pdiffLwrtY[j] * a
 
 % regularization.  Should the learning adjustment come before or after decay?
+%   I put it before, since y was computed with the old U.
+%   if R >1, regularization swamps learning otherwise
+%   Bengio used R = 1e-4 and 1e-5, 
+%               epsilon = 0.001, epsilon decay of epsilon/(1+1e8)
+%   I don't currently have any epsilon decay code.
 nU = (1-R*epsilon)*(U + epsilon * (pdiffLwrtY * a'));
 
 %  the (b) comment (b)calls for summing and sharing pdiffLwrtX and pdiffLwrtA
@@ -73,7 +157,7 @@ nU = (1-R*epsilon)*(U + epsilon * (pdiffLwrtY * a'));
 %  (c) back-prop step.  For all k:
 %  pdiffLwrtO[k] = (1-a[k]**2) * pdiffLwrtA[k]
 
-pdiffLwrtO = (ones(size(a)) - a .* a) .* pdiffLwrtA;
+pdiffLwrtO = (ones(size(a)) - (a .* a)) .* pdiffLwrtA;
 
 % paper has:  
 % pdiffLwrtX = pdiffLwrtX + H' * pdifLwrtO
@@ -90,14 +174,30 @@ nH = (1-R*epsilon)*(H + epsilon * pdiffLwrtO * x');
 
 
 nC = C;
-nC(words(1),1:100) = C(words(1),1:end) + epsilon*pdiffLwrtX(1:100)';
-nC(words(2),1:100) = C(words(2),1:end) + epsilon*pdiffLwrtX(101:200)';
-nC(words(4),1:100) = C(words(4),1:end) + epsilon*pdiffLwrtX(201:300)';
-nC(words(5),1:100) = C(words(5),1:end) + epsilon*pdiffLwrtX(301:400)';
+nC(words(1),1:100) = C(words(1),1:end) + epsilon*pdiffLwrtX(1:100);
+nC(words(2),1:100) = C(words(2),1:end) + epsilon*pdiffLwrtX(101:200);
+nC(words(4),1:100) = C(words(4),1:end) + epsilon*pdiffLwrtX(201:300);
+nC(words(5),1:100) = C(words(5),1:end) + epsilon*pdiffLwrtX(301:400);
 
 %regularization:
 nC = nC*(1-R*epsilon);
 
+keyboard()
 %return the corrected values
 %return
-endfunction
+% if we were training we'd save nb nH nd nU nC in their corresponding spots.
+endfor
+
+
+%disp(C(1:10,1:end));
+
+
+%should save the entire learned weights, d, H, b, U, C, as well as 
+% the dimensions-determining parameters: 
+
+%parameters = [ hidden_layer_size, vocabulary_size, feature_length, input_order , output_size, R , epochs , stepsize ]
+
+%save -text NN.mat parameters d H b U C
+
+printf(" started at %s time now %s\n", start_time, ctime(time()));
+
